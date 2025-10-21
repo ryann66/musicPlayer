@@ -47,6 +47,22 @@ public class PlaylistManager {
 	}
 
 	/**
+	 * Returns a collection representing the current state of the queue
+	 * the remove() operation on any iterator spawned from the collection will be unsupported
+	 * @return an ordered iterable of songs in the queue
+	 */
+	public @NonNull Iterable<Song> getQueue() {
+
+	}
+
+	/**
+	 * Searches for and removes the song from the queue
+	 */
+	public void removeSong(@NonNull Song song) {
+
+	}
+
+	/**
 	 * Sets the repeat mode to be used
 	 * @param mode the repeat mode
 	 */
