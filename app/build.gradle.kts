@@ -67,4 +67,5 @@ dependencies {
 	implementation(libs.androidx.fragment)
 	implementation("androidx.media3:media3-exoplayer:1.5.1")
 	implementation("androidx.media3:media3-session:1.5.1")
+	implementation("androidx.compose.material:material-icons-extended:1.7.8")
 }
