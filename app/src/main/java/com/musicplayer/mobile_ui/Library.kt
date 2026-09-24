@@ -975,20 +975,7 @@ fun LibraryBrowserView(
 									emptyList()
 								)
 
-								val structuralMediaId =
-									when (clickedItem) {
-
-										is MusicItem.Album ->
-											"ALBUM_${clickedItem.title}"
-
-										is MusicItem.Artist ->
-											"ARTIST_${clickedItem.name}"
-
-										is MusicItem.Playlist ->
-											"PLAYLIST_${clickedItem.name}"
-
-										else -> ""
-									}
+								val structuralMediaId = clickedItem.id
 
 								fetchChildrenFromMedia3(
 									structuralMediaId,
@@ -1373,35 +1360,24 @@ private fun fetchChildrenFromMedia3(
 						?: emptyList()
 
 				val mappedItems =
-					children.map { media3Item ->
+					children.mapNotNull { media3Item ->
 
-						val meta =
-							media3Item.mediaMetadata
+						val meta = media3Item.mediaMetadata
 
 						val typeString =
-							meta.extras
-								?.getString("TYPE")
-								?: "SONG"
+							mediaItemType(media3Item)
 
 						val titleStr =
-							meta.title
-								?.toString()
-								?: "Unknown"
+							meta.title?.toString() ?: "Unknown"
 
 						val artistStr =
-							meta.artist
-								?.toString()
-								?: "Unknown"
+							meta.artist?.toString() ?: "Unknown"
 
 						val artUriStr =
-							meta.artworkUri
-								?.toString()
-								?: ""
+							meta.artworkUri?.toString() ?: ""
 
 						when (typeString) {
-
 							"ALBUM" ->
-
 								MusicItem.Album(
 									media3Item.mediaId,
 									titleStr,
@@ -1410,7 +1386,6 @@ private fun fetchChildrenFromMedia3(
 								)
 
 							"ARTIST" ->
-
 								MusicItem.Artist(
 									media3Item.mediaId,
 									titleStr,
@@ -1418,21 +1393,21 @@ private fun fetchChildrenFromMedia3(
 								)
 
 							"PLAYLIST" ->
-
 								MusicItem.Playlist(
 									media3Item.mediaId,
 									titleStr,
 									artUriStr
 								)
 
-							else ->
-
+							"SONG" ->
 								MusicItem.Song(
 									media3Item.mediaId,
 									titleStr,
 									artUriStr,
 									artistStr
 								)
+
+							else -> null
 						}
 					}
 
@@ -1450,4 +1425,14 @@ private fun fetchChildrenFromMedia3(
 			command.run()
 		}
 	)
+}
+
+private fun mediaItemType(mediaItem: MediaItem): String {
+	return when {
+		mediaItem.mediaId.startsWith("SONG_") -> "SONG"
+		mediaItem.mediaId.startsWith("ALBUM_") -> "ALBUM"
+		mediaItem.mediaId.startsWith("ARTIST_") -> "ARTIST"
+		mediaItem.mediaId.startsWith("PLAYLIST_") -> "PLAYLIST"
+		else -> "UNKNOWN"
+	}
 }
