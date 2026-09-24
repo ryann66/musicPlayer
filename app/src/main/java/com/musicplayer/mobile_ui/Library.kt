@@ -30,7 +30,8 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaBrowser
 import androidx.media3.session.MediaController
 import kotlinx.coroutines.delay
-
+import com.google.common.util.concurrent.ListenableFuture
+import kotlin.coroutines.resume
 
 enum class LibraryTab(
 	val displayName: String,
@@ -158,7 +159,6 @@ fun MainMusicAppScreen(
 	}
 }
 
-
 /* ============================================================
  * SELECTION PLAYBACK BAR
  * ============================================================ */
@@ -170,23 +170,51 @@ private fun SelectionPlaybackBar(
 	mediaBrowser: MediaBrowser?,
 	onFinished: () -> Unit
 ) {
-	if (mediaBrowser == null) {
+	if (mediaBrowser == null || selectedItems.isEmpty()) {
 		return
 	}
 
 	/*
-	 * Only songs can currently be played.
-	 *
-	 * Albums, artists and playlists can still be selected,
-	 * but they are ignored by these playback actions.
+	 * Keep the order in which items appear in the current
+	 * library, rather than the arbitrary iteration order of
+	 * the Set.
 	 */
-	val songs =
-		currentItems
-			.filterIsInstance<MusicItem.Song>()
-			.filter { song ->
-				song in selectedItems
-			}
+	val selectedInDisplayOrder =
+		currentItems.filter { it in selectedItems }
 
+	var resolvedSongs by remember(
+		selectedItems,
+		currentItems,
+		mediaBrowser
+	) {
+		mutableStateOf<List<MusicItem.Song>?>(null)
+	}
+
+	/*
+	 * Resolve every selected item into its descendant songs.
+	 *
+	 * Songs resolve directly.
+	 * Albums / artists / playlists are expanded through Media3.
+	 */
+	LaunchedEffect(
+		selectedInDisplayOrder,
+		mediaBrowser
+	) {
+		resolvedSongs =
+			resolveSelectedItemsToSongs(
+				selectedItems =
+					selectedInDisplayOrder,
+				mediaBrowser =
+					mediaBrowser
+			)
+	}
+
+	val songs = resolvedSongs ?: return
+
+	/*
+	 * Don't show the bar until resolution has completed,
+	 * or if the selected containers contain no songs.
+	 */
 	if (songs.isEmpty()) {
 		return
 	}
@@ -196,7 +224,6 @@ private fun SelectionPlaybackBar(
 		color = MaterialTheme.colorScheme.surface,
 		tonalElevation = 2.dp
 	) {
-
 		Row(
 			modifier = Modifier
 				.fillMaxWidth()
@@ -210,12 +237,9 @@ private fun SelectionPlaybackBar(
 
 			/*
 			 * PLAY NOW
-			 *
-			 * Replaces the current Media3 playlist.
 			 */
 			OutlinedButton(
 				onClick = {
-
 					playSelectionNow(
 						songs = songs,
 						controller = mediaBrowser
@@ -223,22 +247,16 @@ private fun SelectionPlaybackBar(
 
 					onFinished()
 				},
-
-				modifier =
-					Modifier.weight(1f)
+				modifier = Modifier.weight(1f)
 			) {
 				Text("Play now")
 			}
 
 			/*
 			 * ENQUEUE
-			 *
-			 * Adds the selected songs to the end
-			 * of the current Media3 playlist.
 			 */
 			Button(
 				onClick = {
-
 					enqueueSelection(
 						songs = songs,
 						controller = mediaBrowser
@@ -246,15 +264,211 @@ private fun SelectionPlaybackBar(
 
 					onFinished()
 				},
-
-				modifier =
-					Modifier.weight(1f)
+				modifier = Modifier.weight(1f)
 			) {
 				Text("Enqueue")
 			}
 		}
 	}
 }
+
+
+/* ============================================================
+ * RESOLVE SELECTED ITEMS TO SONGS
+ * ============================================================ */
+
+private suspend fun resolveSelectedItemsToSongs(
+	selectedItems: List<MusicItem>,
+	mediaBrowser: MediaBrowser
+): List<MusicItem.Song> {
+
+	val result =
+		mutableListOf<MusicItem.Song>()
+
+	/*
+	 * Resolve each selected item independently.
+	 *
+	 * A Song is already playable.
+	 * Everything else is treated as a Media3 parent and
+	 * expanded into its children.
+	 */
+	for (item in selectedItems) {
+
+		when (item) {
+
+			is MusicItem.Song -> {
+				result += item
+			}
+
+			is MusicItem.Album,
+			is MusicItem.Artist,
+			is MusicItem.Playlist -> {
+
+				result +=
+					resolveContainerToSongs(
+						parentId = item.id,
+						mediaBrowser = mediaBrowser
+					)
+			}
+		}
+	}
+
+	return result
+}
+
+
+/* ============================================================
+ * RESOLVE A CONTAINER TO ALL SONG CHILDREN
+ * ============================================================ */
+
+private suspend fun resolveContainerToSongs(
+	parentId: String,
+	mediaBrowser: MediaBrowser
+): List<MusicItem.Song> {
+
+	val future =
+		mediaBrowser.getChildren(
+			parentId,
+			0,
+			Int.MAX_VALUE,
+			null
+		)
+
+	return try {
+
+		val result =
+			future.await()
+
+		val children =
+			result.value ?: emptyList()
+
+		val songs =
+			mutableListOf<MusicItem.Song>()
+
+		for (media3Item in children) {
+
+			when (mediaItemType(media3Item)) {
+
+				"SONG" -> {
+
+					mapMedia3ItemToMusicItem(
+						media3Item
+					)?.let { item ->
+
+						if (item is MusicItem.Song) {
+							songs += item
+						}
+					}
+				}
+
+				"ALBUM",
+				"ARTIST",
+				"PLAYLIST" -> {
+
+					songs +=
+						resolveContainerToSongs(
+							parentId =
+								media3Item.mediaId,
+							mediaBrowser =
+								mediaBrowser
+						)
+				}
+			}
+		}
+
+		songs
+
+	} catch (e: Exception) {
+
+		e.printStackTrace()
+		emptyList()
+	}
+}
+
+
+
+/* ============================================================
+ * MAP MEDIA3 ITEM
+ * ============================================================ */
+
+private fun mapMedia3ItemToMusicItem(
+	media3Item: MediaItem
+): MusicItem? {
+
+	val meta =
+		media3Item.mediaMetadata
+
+	val title =
+		meta.title?.toString() ?: "Unknown"
+
+	val artist =
+		meta.artist?.toString() ?: "Unknown"
+
+	val artworkUri =
+		meta.artworkUri?.toString() ?: ""
+
+	return when (mediaItemType(media3Item)) {
+
+		"ALBUM" ->
+			MusicItem.Album(
+				id = media3Item.mediaId,
+				title = title,
+				artist = artist
+			)
+
+		"ARTIST" ->
+			MusicItem.Artist(
+				id = media3Item.mediaId,
+				name = title,
+			)
+
+		"PLAYLIST" ->
+			MusicItem.Playlist(
+				id = media3Item.mediaId,
+				name = title,
+			)
+
+		"SONG" ->
+			MusicItem.Song(
+				id = media3Item.mediaId,
+				title = title,
+				artist = artist
+			)
+
+		else -> null
+	}
+}
+
+
+/* ============================================================
+ * MEDIA3 FUTURE AWAIT HELPER
+ * ============================================================ */
+
+private suspend fun <T> ListenableFuture<T>.await(): T =
+	kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+
+		addListener(
+			{
+				try {
+					continuation.resume(
+						get(),
+						onCancellation = null
+					)
+				} catch (error: Throwable) {
+					continuation.resumeWith(
+						Result.failure(error)
+					)
+				}
+			},
+			{ command ->
+				command.run()
+			}
+		)
+
+		continuation.invokeOnCancellation {
+			cancel(false)
+		}
+	}
 
 
 /* ============================================================
@@ -1373,38 +1587,31 @@ private fun fetchChildrenFromMedia3(
 						val artistStr =
 							meta.artist?.toString() ?: "Unknown"
 
-						val artUriStr =
-							meta.artworkUri?.toString() ?: ""
-
 						when (typeString) {
 							"ALBUM" ->
 								MusicItem.Album(
 									media3Item.mediaId,
 									titleStr,
-									artUriStr,
-									artistStr
+									artistStr,
 								)
 
 							"ARTIST" ->
 								MusicItem.Artist(
 									media3Item.mediaId,
 									titleStr,
-									artUriStr
 								)
 
 							"PLAYLIST" ->
 								MusicItem.Playlist(
 									media3Item.mediaId,
 									titleStr,
-									artUriStr
 								)
 
 							"SONG" ->
 								MusicItem.Song(
 									media3Item.mediaId,
 									titleStr,
-									artUriStr,
-									artistStr
+									artistStr,
 								)
 
 							else -> null

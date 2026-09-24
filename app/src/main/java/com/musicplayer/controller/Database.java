@@ -9,6 +9,7 @@ import java.util.List;
 
 public interface Database {
 	// unplayable keys, contain all children of their type
+	String LIBRARY_ROOT="ROOT_INDEX";
 	String SONG_ROOT="ROOT_SONGS", ALBUM_ROOT="ROOT_ALBUMS", ARTIST_ROOT="ROOT_ARTISTS", PLAYLIST_ROOT="ROOT_PLAYLISTS";
 
 	void addMediaItem(Uri uri, String title, String author, String album);

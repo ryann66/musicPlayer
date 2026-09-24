@@ -57,25 +57,32 @@ public class BadDatabase implements Database {
 			new HashMap<>();
 
 	public BadDatabase() {
+		children.put( LIBRARY_ROOT, new ArrayList<>(List.of( SONG_ROOT, ALBUM_ROOT, ARTIST_ROOT, PLAYLIST_ROOT )) );
+		mediaItems.put( LIBRARY_ROOT, new MediaItemInfo( SONG_ROOT, null, "Root", null, null ) );
+
 		children.put(
 				SONG_ROOT,
 				new ArrayList<>()
 		);
+		mediaItems.put( SONG_ROOT, new MediaItemInfo( SONG_ROOT, null, "Songs", null, null ) );
 
 		children.put(
 				ALBUM_ROOT,
 				new ArrayList<>()
 		);
+		mediaItems.put( SONG_ROOT, new MediaItemInfo( SONG_ROOT, null, "Albums", null, null ) );
 
 		children.put(
 				ARTIST_ROOT,
 				new ArrayList<>()
 		);
+		mediaItems.put( SONG_ROOT, new MediaItemInfo( SONG_ROOT, null, "Artists", null, null ) );
 
 		children.put(
 				PLAYLIST_ROOT,
 				new ArrayList<>()
 		);
+		mediaItems.put( SONG_ROOT, new MediaItemInfo( SONG_ROOT, null, "Playlists", null, null ) );
 	}
 
 	/*
