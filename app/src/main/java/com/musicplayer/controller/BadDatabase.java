@@ -1,5 +1,7 @@
 package com.musicplayer.controller;
 
+import android.net.Uri;
+
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -7,11 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 public class BadDatabase implements Database {
+
 	private int nextSongId = 1;
 	private int nextAlbumId = 1;
 	private int nextArtistId = 1;
 	private int nextPlaylistId = 1;
-
 
 	/*
 	 * =========================================================
@@ -28,19 +30,20 @@ public class BadDatabase implements Database {
 	private final Map<String, String> playlistIds =
 			new HashMap<>();
 
-
 	/*
 	 * =========================================================
-	 * SONG LOOKUPS
+	 * MEDIA ITEM LOOKUPS
 	 * =========================================================
+	 *
+	 * Contains songs and structural items
+	 * (albums, artists, playlists).
 	 */
 
 	private final Map<String, MediaItemInfo> mediaItems =
 			new HashMap<>();
 
-	private final Map<Path, String> pathIds =
+	private final Map<Uri, String> pathIds =
 			new HashMap<>();
-
 
 	/*
 	 * =========================================================
@@ -49,12 +52,11 @@ public class BadDatabase implements Database {
 	 *
 	 * Parent ID -> ordered child IDs.
 	 */
+
 	private final Map<String, List<String>> children =
 			new HashMap<>();
 
-
 	public BadDatabase() {
-
 		children.put(
 				SONG_ROOT,
 				new ArrayList<>()
@@ -75,7 +77,6 @@ public class BadDatabase implements Database {
 				new ArrayList<>()
 		);
 	}
-
 
 	/*
 	 * =========================================================
@@ -107,33 +108,21 @@ public class BadDatabase implements Database {
 
 	@Override
 	public void addMediaItem(
-			Path path,
+			Uri path,
 			String title,
 			String author,
 			String album
 	) {
-		/*
-		 * Don't add the same file twice.
-		 */
-		if (pathIds.containsKey(path)) {
+		if (path == null || pathIds.containsKey(path)) {
 			return;
 		}
 
-		/*
-		 * Get/create structural parents first.
-		 */
 		String artistId =
 				getOrCreateArtist(author);
 
 		String albumId =
-				getOrCreateAlbum(
-						album,
-						artistId
-				);
+				getOrCreateAlbum(album);
 
-		/*
-		 * Create the actual song ID.
-		 */
 		String songId =
 				newSongId();
 
@@ -156,28 +145,18 @@ public class BadDatabase implements Database {
 				songId
 		);
 
-		/*
-		 * SONG_ROOT -> song
-		 */
 		children
 				.get(SONG_ROOT)
 				.add(songId);
 
-		/*
-		 * ALBUM_xxx -> song
-		 */
 		children
 				.get(albumId)
 				.add(songId);
 
-		/*
-		 * ARTIST_xxx -> song
-		 */
 		children
 				.get(artistId)
 				.add(songId);
 	}
-
 
 	/*
 	 * =========================================================
@@ -212,9 +191,19 @@ public class BadDatabase implements Database {
 				.get(ARTIST_ROOT)
 				.add(id);
 
+		mediaItems.put(
+				id,
+				new MediaItemInfo(
+						id,
+						null,
+						author,
+						author,
+						null
+				)
+		);
+
 		return id;
 	}
-
 
 	/*
 	 * =========================================================
@@ -223,13 +212,8 @@ public class BadDatabase implements Database {
 	 */
 
 	private String getOrCreateAlbum(
-			String album,
-			String artistId
+			String album
 	) {
-		/*
-		 * Deliberately simple:
-		 * album names are globally unique.
-		 */
 		String existing =
 				albumIds.get(album);
 
@@ -254,9 +238,19 @@ public class BadDatabase implements Database {
 				.get(ALBUM_ROOT)
 				.add(id);
 
+		mediaItems.put(
+				id,
+				new MediaItemInfo(
+						id,
+						null,
+						album,
+						null,
+						album
+				)
+		);
+
 		return id;
 	}
-
 
 	/*
 	 * =========================================================
@@ -264,14 +258,12 @@ public class BadDatabase implements Database {
 	 * =========================================================
 	 */
 
+	// TODO: not currently implemented
 	@Override
 	public void bindPlaylist(
-			Path path,
+			Uri path,
 			String playlist
 	) {
-		/*
-		 * Find the song represented by this file.
-		 */
 		String songId =
 				pathIds.get(path);
 
@@ -279,14 +271,10 @@ public class BadDatabase implements Database {
 			return;
 		}
 
-		/*
-		 * Get/create the playlist.
-		 */
 		String playlistId =
 				playlistIds.get(playlist);
 
 		if (playlistId == null) {
-
 			playlistId =
 					newPlaylistId();
 
@@ -303,11 +291,19 @@ public class BadDatabase implements Database {
 			children
 					.get(PLAYLIST_ROOT)
 					.add(playlistId);
+
+			mediaItems.put(
+					playlistId,
+					new MediaItemInfo(
+							playlistId,
+							null,
+							playlist,
+							null,
+							null
+					)
+			);
 		}
 
-		/*
-		 * Avoid duplicate playlist entries.
-		 */
 		List<String> playlistChildren =
 				children.get(playlistId);
 
@@ -315,7 +311,6 @@ public class BadDatabase implements Database {
 			playlistChildren.add(songId);
 		}
 	}
-
 
 	/*
 	 * =========================================================
@@ -337,33 +332,25 @@ public class BadDatabase implements Database {
 		return List.copyOf(result);
 	}
 
-
 	/*
 	 * =========================================================
-	 * SONG PATH
+	 * SONG URI
 	 * =========================================================
 	 */
 
 	@Override
-	public String getPath(
+	public Uri getUri(
 			String id
 	) {
 		MediaItemInfo item =
 				mediaItems.get(id);
 
-		/*
-		 * Only songs have paths.
-		 *
-		 * Albums/artists/playlists are structural
-		 * and therefore unplayable.
-		 */
-		if (item == null) {
+		if (item == null || !id.startsWith("SONG_")) {
 			return null;
 		}
 
-		return item.path().toString();
+		return item.uri();
 	}
-
 
 	/*
 	 * =========================================================

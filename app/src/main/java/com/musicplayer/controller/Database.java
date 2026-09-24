@@ -11,30 +11,34 @@ public interface Database {
 	// unplayable keys, contain all children of their type
 	String SONG_ROOT="ROOT_SONGS", ALBUM_ROOT="ROOT_ALBUMS", ARTIST_ROOT="ROOT_ARTISTS", PLAYLIST_ROOT="ROOT_PLAYLISTS";
 
-	void addMediaItem(Path path, String title, String author, String album);
+	void addMediaItem(Uri uri, String title, String author, String album);
 
-	void bindPlaylist(Path path, String playlist);
+	void bindPlaylist(Uri path, String playlist);
 
 	List<String> getChildren(String id);
 
 	// null if unplayable or does not exist
-	String getPath(String id);
+	Uri getUri(String id);
 
 	MediaItemInfo getMediaItem(String id);
 
-	record MediaItemInfo( String id, Path path, String title, String author, String album ) {
+	record MediaItemInfo( String id, Uri uri, String title, String author, String album ) {
 		public MediaItem toMediaItem() {
+			boolean isSong = id.startsWith("SONG_");
+
 			return new MediaItem.Builder()
 					.setMediaId(id)
-					.setUri(Uri.fromFile(path.toFile()))
-					.setMediaMetadata( new MediaMetadata.Builder()
-							.setTitle(title)
-							.setArtist(author)
-							.setAlbumTitle(album)
-							.setIsPlayable(true)
-							.setIsBrowsable(false)
-							.build()
-					).build();
+					.setUri(uri)
+					.setMediaMetadata(
+							new MediaMetadata.Builder()
+									.setTitle(title)
+									.setArtist(author)
+									.setAlbumTitle(album)
+									.setIsPlayable(isSong)
+									.setIsBrowsable(!isSong)
+									.build()
+					)
+					.build();
 		}
 	}
 }

@@ -110,7 +110,7 @@ public class PlaybackService extends MediaLibraryService {
 
 			for (MediaItem rawUiItem : mediaItems) {
 				MediaItem resolvedItem = rawUiItem.buildUpon()
-						.setUri(Uri.parse(database.getPath(rawUiItem.mediaId)))
+						.setUri(database.getUri(rawUiItem.mediaId))
 						.build();
 
 				playReadyItems.add(resolvedItem);

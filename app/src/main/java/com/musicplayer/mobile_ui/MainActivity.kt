@@ -1,9 +1,13 @@
 package com.musicplayer.mobile_ui
 
+import android.Manifest
 import android.content.ComponentName
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,42 +24,95 @@ class MainActivity : ComponentActivity() {
 
 	private var browserFuture: ListenableFuture<MediaBrowser>? = null
 
-	// Compose state property that lets our screen react immediately
-	// the moment the background engine successfully binds
 	private var mediaBrowserState by mutableStateOf<MediaBrowser?>(null)
 
-	override fun onCreate(savedInstanceState: Bundle?) {
+	private val permissionLauncher =
+		registerForActivityResult(
+			ActivityResultContracts.RequestPermission()
+		) { granted ->
+
+			if (granted) {
+				connectToPlaybackService()
+			}
+		}
+
+	override fun onCreate(
+		savedInstanceState: Bundle?
+	) {
 		super.onCreate(savedInstanceState)
 
-		// 1. Point a SessionToken straight to your Java PlaybackService
-		val sessionToken = SessionToken(
-			this,
-			ComponentName(this, PlaybackService::class.java)
-		)
-
-		// 2. Initialize the MediaBrowser asynchronously
-		browserFuture = MediaBrowser.Builder(this, sessionToken).buildAsync()
-		browserFuture?.addListener({
-			try {
-				// Connection successful! Expose the browser instance to our Compose layers
-				mediaBrowserState = browserFuture?.get()
-			} catch (e: Exception) {
-				e.printStackTrace()
-			}
-		}, ContextCompat.getMainExecutor(this))
-
-		// 3. Mount your functional music interface layout
 		setContent {
-			// We pass your brand new bottom navigation app scaffolding screen
-			MainMusicAppScreen(mediaBrowser = mediaBrowserState)
+			MainMusicAppScreen(
+				mediaBrowser = mediaBrowserState
+			)
+		}
+
+		if (hasAudioPermission()) {
+			connectToPlaybackService()
+		} else {
+			requestAudioPermission()
 		}
 	}
 
+	private fun hasAudioPermission(): Boolean {
+		val permission =
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+				Manifest.permission.READ_MEDIA_AUDIO
+			} else {
+				Manifest.permission.READ_EXTERNAL_STORAGE
+			}
+
+		return ContextCompat.checkSelfPermission(
+			this,
+			permission
+		) == PackageManager.PERMISSION_GRANTED
+	}
+
+	private fun requestAudioPermission() {
+		val permission =
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+				Manifest.permission.READ_MEDIA_AUDIO
+			} else {
+				Manifest.permission.READ_EXTERNAL_STORAGE
+			}
+
+		permissionLauncher.launch(permission)
+	}
+
+	private fun connectToPlaybackService() {
+		val sessionToken =
+			SessionToken(
+				this,
+				ComponentName(
+					this,
+					PlaybackService::class.java
+				)
+			)
+
+		browserFuture =
+			MediaBrowser.Builder(
+				this,
+				sessionToken
+			).buildAsync()
+
+		browserFuture?.addListener(
+			{
+				try {
+					mediaBrowserState =
+						browserFuture?.get()
+				} catch (e: Exception) {
+					e.printStackTrace()
+				}
+			},
+			ContextCompat.getMainExecutor(this)
+		)
+	}
+
 	override fun onDestroy() {
-		// Release the asynchronous binding token to avoid activity memory leaks
 		browserFuture?.let {
 			MediaBrowser.releaseFuture(it)
 		}
+
 		super.onDestroy()
 	}
 }

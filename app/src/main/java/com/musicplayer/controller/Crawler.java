@@ -1,13 +1,11 @@
 package com.musicplayer.controller;
 
 import android.content.ContentResolver;
+import android.content.ContentUris;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.MediaStore;
-
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
 public class Crawler {
 	private final Database target;
@@ -19,16 +17,18 @@ public class Crawler {
 	}
 
 	public void crawl() {
-		Uri collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
+		Uri collection =
+				MediaStore.Audio.Media.EXTERNAL_CONTENT_URI;
 
 		String[] projection = {
-				MediaStore.Audio.Media.DATA,
+				MediaStore.Audio.Media._ID,
 				MediaStore.Audio.Media.TITLE,
 				MediaStore.Audio.Media.ARTIST,
 				MediaStore.Audio.Media.ALBUM
 		};
 
-		String selection = MediaStore.Audio.Media.IS_MUSIC + " != 0";
+		String selection =
+				MediaStore.Audio.Media.IS_MUSIC + " != 0";
 
 		try (Cursor cursor = resolver.query(
 				collection,
@@ -41,40 +41,67 @@ public class Crawler {
 				return;
 			}
 
-			int pathColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DATA);
-			int titleColumn = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE);
-			int artistColumn = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST);
-			int albumColumn = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM);
+			int idColumn =
+					cursor.getColumnIndex(
+							MediaStore.Audio.Media._ID
+					);
 
-			if (pathColumn < 0) {
+			int titleColumn =
+					cursor.getColumnIndex(
+							MediaStore.Audio.Media.TITLE
+					);
+
+			int artistColumn =
+					cursor.getColumnIndex(
+							MediaStore.Audio.Media.ARTIST
+					);
+
+			int albumColumn =
+					cursor.getColumnIndex(
+							MediaStore.Audio.Media.ALBUM
+					);
+
+			if (idColumn < 0) {
 				return;
 			}
 
 			while (cursor.moveToNext()) {
 
-				String pathString = cursor.getString(pathColumn);
-				if (pathString == null) {
-					continue;
-				}
+				long mediaStoreId =
+						cursor.getLong(idColumn);
 
-				Path path = Paths.get(pathString);
+				Uri uri =
+						ContentUris.withAppendedId(
+								MediaStore.Audio.Media
+										.EXTERNAL_CONTENT_URI,
+								mediaStoreId
+						);
 
-				String title = titleColumn >= 0
-						? cursor.getString(titleColumn)
-						: null;
+				String title =
+						titleColumn >= 0
+								? cursor.getString(titleColumn)
+								: null;
+
 				if (title == null) {
 					continue;
 				}
 
-				String author = artistColumn >= 0
-						? cursor.getString(artistColumn)
-						: null;
+				String author =
+						artistColumn >= 0
+								? cursor.getString(artistColumn)
+								: null;
 
-				String album = albumColumn >= 0
-						? cursor.getString(albumColumn)
-						: null;
+				String album =
+						albumColumn >= 0
+								? cursor.getString(albumColumn)
+								: null;
 
-				target.addMediaItem(path, title, author, album);
+				target.addMediaItem(
+						uri,
+						title,
+						author,
+						album
+				);
 			}
 		}
 	}
